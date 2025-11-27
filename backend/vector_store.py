@@ -6,6 +6,9 @@ from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
 
+# Disable tokenizers parallelism warning
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 # Initialize ChromaDB client
 chroma_client = chromadb.Client(Settings(
     persist_directory="./chroma_db",
@@ -62,6 +65,18 @@ def create_embeddings(product_id: str, description: str, reviews: List[dict]):
     )
     
     print(f"✓ Created embeddings for product {product_id}: {len(documents)} documents")
+    print(f"  - Description: 1")
+    print(f"  - Reviews: {len(reviews)}")
+    
+    # Verify embeddings were saved
+    try:
+        test_results = collection.query(query_texts=["test"], n_results=1)
+        if test_results['documents']:
+            print(f"  - Verification: Embeddings successfully saved ✓")
+        else:
+            print(f"  - WARNING: Verification failed - no embeddings found!")
+    except Exception as e:
+        print(f"  - WARNING: Could not verify embeddings: {e}")
 
 def search_similar_content(product_id: str, query: str, top_k: int = 5):
     """Search for reviews/descriptions similar to the query."""

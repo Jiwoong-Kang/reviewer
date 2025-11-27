@@ -24,6 +24,14 @@ def generate_response(
     # 1. Search for relevant reviews and descriptions
     search_results = search_similar_content(product_id, user_message, top_k=5)
     
+    # Debug logging
+    print(f"[DEBUG] Search results for '{user_message}':")
+    print(f"  - Found {len(search_results['documents'])} documents")
+    if search_results['documents']:
+        print(f"  - First result type: {search_results['metadatas'][0].get('type', 'unknown')}")
+    else:
+        print(f"  - WARNING: No documents found! Check embeddings.")
+    
     # 2. Build context
     context_parts = []
     
@@ -35,6 +43,11 @@ def generate_response(
             context_parts.append(f"[Review - Rating: {rating}]\n{doc}\n")
     
     context = "\n".join(context_parts)
+    
+    # Debug: Check if context is empty
+    if not context.strip():
+        print(f"[WARNING] Empty context for product {product_id}!")
+        print(f"[WARNING] This means embeddings might not be created properly.")
     
     # 3. Build prompt
     system_prompt = f"""You are a product review expert assistant.

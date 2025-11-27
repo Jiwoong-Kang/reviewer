@@ -71,7 +71,8 @@ async def upload_product(product: ProductUpload):
         
         # Create vector embeddings (handled in separate function)
         from vector_store import create_embeddings
-        create_embeddings(product.product_id, product.description, product.reviews)
+        reviews_dict = [r.dict() for r in product.reviews]
+        create_embeddings(product.product_id, product.description, reviews_dict)
         
         return {
             "status": "success",
@@ -159,7 +160,7 @@ async def add_review(product_id: str, review: Review):
     # Update vector embeddings
     from vector_store import create_embeddings
     product = await ProductDatabase.get_product(product_id)
-    create_embeddings(product_id, product["description"], product["reviews"])
+    create_embeddings(product_id, product["description"], product.get("reviews", []))
     
     return {"status": "success", "message": "Review added"}
 

@@ -65,6 +65,7 @@ async function loadProducts() {
         data.products.forEach(product => {
             const item = document.createElement('div');
             item.className = 'product-item';
+            item.dataset.productId = product.product_id; // Add data attribute
             
             // Display image if available
             const imageHtml = product.image 
@@ -101,8 +102,10 @@ async function selectProduct(productId) {
         // Show selection in product list
         document.querySelectorAll('.product-item').forEach(item => {
             item.classList.remove('active');
+            if (item.dataset.productId === productId) {
+                item.classList.add('active');
+            }
         });
-        event.currentTarget.classList.add('active');
         
         // Initialize chat
         chatContainer.innerHTML = `
