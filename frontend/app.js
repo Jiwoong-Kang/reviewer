@@ -65,7 +65,14 @@ async function loadProducts() {
         data.products.forEach(product => {
             const item = document.createElement('div');
             item.className = 'product-item';
+            
+            // Display image if available
+            const imageHtml = product.image 
+                ? `<img src="${product.image}" alt="${product.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 5px; margin-bottom: 5px;">` 
+                : '';
+            
             item.innerHTML = `
+                ${imageHtml}
                 <h3>${product.name}</h3>
                 <p>${product.reviews_count} reviews</p>
             `;
@@ -208,11 +215,12 @@ function removeTypingIndicator(id) {
 async function uploadProduct() {
     const productId = document.getElementById('productId').value.trim();
     const name = document.getElementById('productNameInput').value.trim();
+    const image = document.getElementById('productImage').value.trim();
     const description = document.getElementById('productDesc').value.trim();
     const reviewsText = document.getElementById('reviewsInput').value.trim();
     
     if (!productId || !name || !description) {
-        alert('Please fill in all fields.');
+        alert('Please fill in all required fields.');
         return;
     }
     
@@ -235,6 +243,7 @@ async function uploadProduct() {
             body: JSON.stringify({
                 product_id: productId,
                 name: name,
+                image: image || null,
                 description: description,
                 reviews: reviews
             })
@@ -249,6 +258,7 @@ async function uploadProduct() {
             // Reset form
             document.getElementById('productId').value = '';
             document.getElementById('productNameInput').value = '';
+            document.getElementById('productImage').value = '';
             document.getElementById('productDesc').value = '';
             document.getElementById('reviewsInput').value = '';
             

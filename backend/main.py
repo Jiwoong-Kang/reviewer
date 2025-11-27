@@ -2,9 +2,15 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-import json
 import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Import database
+from database import ProductDatabase
 
 app = FastAPI(title="Product Review Chat API")
 
@@ -28,6 +34,7 @@ class Product(BaseModel):
     product_id: str
     name: str
     description: str
+    image: Optional[str] = None
     reviews: List[Review] = []
 
 class ChatMessage(BaseModel):
@@ -39,26 +46,28 @@ class ProductUpload(BaseModel):
     product_id: str
     name: str
     description: str
+    image: Optional[str] = None
     reviews: List[Review]
-
-# Simple in-memory storage (use database in production)
-products_db = {}
 
 @app.get("/")
 def root():
-    return {"message": "Product Review Chat API", "version": "1.0.0"}
+    return {"message": "Product Review Chat API", "version": "2.0.0", "database": "Supabase"}
 
 @app.post("/api/products/upload")
 async def upload_product(product: ProductUpload):
     """Upload product information and reviews."""
     try:
-        products_db[product.product_id] = {
-            "product_id": product.product_id,
-            "name": product.name,
-            "description": product.description,
-            "reviews": [r.dict() for r in product.reviews],
-            "uploaded_at": datetime.now().isoformat()
-        }
+        # Save product to Supabase
+        result = await ProductDatabase.create_product(
+            product_id=product.product_id,
+            name=product.name,
+            description=product.description,
+            image=product.image,
+            reviews=[r.dict() for r in product.reviews]
+        )
+        
+        if result["status"] == "error":
+            raise HTTPException(status_code=500, detail=result["message"])
         
         # Create vector embeddings (handled in separate function)
         from vector_store import create_embeddings
@@ -75,21 +84,25 @@ async def upload_product(product: ProductUpload):
 @app.get("/api/products/{product_id}")
 async def get_product(product_id: str):
     """Get product information."""
-    if product_id not in products_db:
+    product = await ProductDatabase.get_product(product_id)
+    if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    return products_db[product_id]
+    return product
 
 @app.get("/api/products")
 async def list_products():
     """Get all products list."""
+    products = await ProductDatabase.get_all_products()
     return {
         "products": [
             {
-                "product_id": p["product_id"],
+                "product_id": p["id"],
                 "name": p["name"],
-                "reviews_count": len(p["reviews"])
+                "image": p.get("image"),
+                "created_at": p.get("created_at"),
+                "reviews_count": len(p.get("reviews", []))
             }
-            for p in products_db.values()
+            for p in products
         ]
     }
 
@@ -97,7 +110,9 @@ async def list_products():
 async def chat(message: ChatMessage):
     """Answer questions about the product."""
     try:
-        if message.product_id not in products_db:
+        # Check if product exists
+        product = await ProductDatabase.get_product(message.product_id)
+        if not product:
             raise HTTPException(status_code=404, detail="Product not found")
         
         # Generate response using RAG pattern
@@ -119,16 +134,35 @@ async def chat(message: ChatMessage):
 @app.delete("/api/products/{product_id}")
 async def delete_product(product_id: str):
     """Delete a product."""
-    if product_id not in products_db:
+    product = await ProductDatabase.get_product(product_id)
+    if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
+    # Delete vector embeddings
     from vector_store import delete_embeddings
     delete_embeddings(product_id)
     
-    del products_db[product_id]
+    # Delete product from database
+    result = await ProductDatabase.delete_product(product_id)
+    if result["status"] == "error":
+        raise HTTPException(status_code=500, detail=result["message"])
+    
     return {"status": "success", "message": "Product deleted"}
+
+@app.post("/api/products/{product_id}/reviews")
+async def add_review(product_id: str, review: Review):
+    """Add a review to a product."""
+    result = await ProductDatabase.add_review(product_id, review.dict())
+    if result["status"] == "error":
+        raise HTTPException(status_code=500, detail=result["message"])
+    
+    # Update vector embeddings
+    from vector_store import create_embeddings
+    product = await ProductDatabase.get_product(product_id)
+    create_embeddings(product_id, product["description"], product["reviews"])
+    
+    return {"status": "success", "message": "Review added"}
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-

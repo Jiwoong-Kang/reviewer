@@ -38,26 +38,38 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Environment Variables Setup
+### 2. Supabase Setup
+
+1. Create a Supabase account at https://supabase.com
+2. Create a new project
+3. Run the SQL script in `backend/supabase_setup.sql`
+4. Copy your Project URL and API Key
+
+See detailed instructions in `SUPABASE_SETUP.md`
+
+### 3. Environment Variables Setup
 
 ```bash
 # Create .env file
-cp .env.example .env
+cp env_example.txt .env
 
-# Open .env file and enter your OpenAI API key
-# OPENAI_API_KEY=your-actual-api-key
+# Edit .env file and add:
+# - OpenAI API key
+# - Supabase URL
+# - Supabase anon key
 ```
 
-### 3. Run Backend Server
+### 4. Run Backend Server
 
 ```bash
 cd backend
+source venv/bin/activate
 python main.py
 ```
 
 Server will run at `http://localhost:8000`.
 
-### 4. Run Frontend
+### 5. Run Frontend
 
 Run frontend with a simple HTTP server:
 
@@ -111,8 +123,9 @@ Access `http://localhost:3000` in your browser
 
 ### Backend
 - **FastAPI**: High-performance Python web framework
-- **OpenAI GPT-4**: Natural language generation
-- **ChromaDB**: Vector database
+- **OpenAI GPT-4o-mini**: Natural language generation
+- **Supabase**: PostgreSQL database (cloud-hosted)
+- **ChromaDB**: Vector database for embeddings
 - **Sentence Transformers**: Korean embeddings (ko-sroberta-multitask)
 
 ### Frontend
