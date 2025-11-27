@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Review Chatbot</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <h2>📦 Products</h2>
+            <div id="productList" class="product-list">
+                <p class="empty-message">Upload a product</p>
+            </div>
+            <button id="uploadBtn" class="upload-btn">+ Upload Product</button>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="main-content">
+            <div class="header">
+                <h1 id="productName">Select a product</h1>
+                <p id="productInfo" class="product-info"></p>
+            </div>
+
+            <div id="chatContainer" class="chat-container">
+                <div class="welcome-message">
+                    <h2>👋 Welcome!</h2>
+                    <p>Select a product and ask any questions.</p>
+                    <p>We'll answer based on actual user reviews.</p>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <input 
+                    type="text" 
+                    id="messageInput" 
+                    placeholder="Ask anything about the product..."
+                    disabled
+                />
+                <button id="sendBtn" disabled>Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Product Upload Modal -->
+    <div id="uploadModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Upload Product</h2>
+            
+            <div class="form-group">
+                <label>Product ID</label>
+                <input type="text" id="productId" placeholder="e.g., prod_001">
+            </div>
+            
+            <div class="form-group">
+                <label>Product Name</label>
+                <input type="text" id="productNameInput" placeholder="e.g., Wireless Bluetooth Earbuds">
+            </div>
+            
+            <div class="form-group">
+                <label>Product Description</label>
+                <textarea id="productDesc" rows="4" placeholder="Enter key features and description..."></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label>Reviews (JSON format)</label>
+                <textarea id="reviewsInput" rows="10" placeholder='[
+  {
+    "review_id": "r1",
+    "content": "Great sound quality!",
+    "rating": 5.0
+  },
+  {
+    "review_id": "r2",
+    "content": "Battery drains quickly",
+    "rating": 3.0
+  }
+]'></textarea>
+            </div>
+            
+            <button id="submitUpload" class="submit-btn">Upload</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
