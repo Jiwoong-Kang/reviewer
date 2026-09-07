@@ -1,13 +1,18 @@
-// Saved products list and "Save to My List" panel
+// Saved products list and "Save to My List" modal
 
 const Saved = (() => {
-    const savePanel = document.getElementById('savePanel');
+    const openSaveBtn = document.getElementById('openSaveBtn');
+    const saveModal = document.getElementById('saveModal');
+    const closeSaveModal = document.getElementById('closeSaveModal');
+    const saveModalTitle = document.getElementById('saveModalTitle');
     const interestLevel = document.getElementById('interestLevel');
     const personalNote = document.getElementById('personalNote');
     const saveProductBtn = document.getElementById('saveProductBtn');
     const removeSavedBtn = document.getElementById('removeSavedBtn');
     const saveMessage = document.getElementById('saveMessage');
     const savedList = document.getElementById('savedList');
+
+    let currentIsSaved = false;
 
     function setSaveMessage(text, isError = false) {
         saveMessage.textContent = text || '';
@@ -21,10 +26,42 @@ const Saved = (() => {
         return level || '';
     }
 
-    function updatePanelVisibility() {
+    function syncHeaderButton() {
         const show = Boolean(AppState.currentProductId);
-        savePanel.classList.toggle('hidden', !show);
-        if (show) saveProductBtn.disabled = false;
+        openSaveBtn.classList.toggle('hidden', !show);
+        openSaveBtn.textContent = currentIsSaved ? 'Saved' : 'Save to My List';
+    }
+
+    function applySavedState(item) {
+        if (item) {
+            currentIsSaved = true;
+            interestLevel.value = item.interest_level || 'interested';
+            personalNote.value = item.personal_note || '';
+            removeSavedBtn.classList.remove('hidden');
+            saveProductBtn.textContent = 'Update Saved';
+            saveModalTitle.textContent = 'Edit Saved Product';
+        } else {
+            currentIsSaved = false;
+            interestLevel.value = 'interested';
+            personalNote.value = '';
+            removeSavedBtn.classList.add('hidden');
+            saveProductBtn.textContent = 'Save to My List';
+            saveModalTitle.textContent = 'Save to My List';
+        }
+        syncHeaderButton();
+    }
+
+    function openModal() {
+        if (!AppState.currentProductId) return;
+        setSaveMessage(
+            currentIsSaved ? 'Already in your list — edit and save to update.' : ''
+        );
+        saveModal.style.display = 'block';
+    }
+
+    function closeModal() {
+        saveModal.style.display = 'none';
+        setSaveMessage('');
     }
 
     async function loadList() {
@@ -71,27 +108,20 @@ const Saved = (() => {
     }
 
     async function showForCurrent() {
-        updatePanelVisibility();
-        if (!Auth.isLoggedIn() || !AppState.currentProductId) return;
-        setSaveMessage('');
+        if (!Auth.isLoggedIn() || !AppState.currentProductId) {
+            currentIsSaved = false;
+            syncHeaderButton();
+            closeModal();
+            return;
+        }
         try {
             const data = await Auth.apiJson(
                 `/api/saved-products/${encodeURIComponent(AppState.currentProductId)}`
             );
-            const item = data.item;
-            if (item) {
-                interestLevel.value = item.interest_level || 'interested';
-                personalNote.value = item.personal_note || '';
-                removeSavedBtn.classList.remove('hidden');
-                saveProductBtn.textContent = 'Update Saved';
-                setSaveMessage('Already in your list — edit and save to update.');
-            } else {
-                interestLevel.value = 'interested';
-                personalNote.value = '';
-                removeSavedBtn.classList.add('hidden');
-                saveProductBtn.textContent = 'Save to My List';
-            }
+            applySavedState(data.item || null);
         } catch (e) {
+            currentIsSaved = false;
+            syncHeaderButton();
             setSaveMessage(e.message, true);
         }
     }
@@ -108,10 +138,13 @@ const Saved = (() => {
                     personal_note: personalNote.value.trim(),
                 }),
             });
+            applySavedState({
+                interest_level: interestLevel.value,
+                personal_note: personalNote.value.trim(),
+            });
             setSaveMessage('Saved to your list.');
-            removeSavedBtn.classList.remove('hidden');
-            saveProductBtn.textContent = 'Update Saved';
             await loadList();
+            closeModal();
         } catch (e) {
             setSaveMessage(e.message, true);
         }
@@ -125,30 +158,35 @@ const Saved = (() => {
                 `/api/saved-products/${encodeURIComponent(AppState.currentProductId)}`,
                 { method: 'DELETE' }
             );
-            interestLevel.value = 'interested';
-            personalNote.value = '';
-            removeSavedBtn.classList.add('hidden');
-            saveProductBtn.textContent = 'Save to My List';
-            setSaveMessage('Removed from your list.');
+            applySavedState(null);
             await loadList();
+            closeModal();
         } catch (e) {
             setSaveMessage(e.message, true);
         }
     }
 
     function reset() {
-        savePanel.classList.add('hidden');
+        currentIsSaved = false;
+        closeModal();
+        openSaveBtn.classList.add('hidden');
         interestLevel.value = 'interested';
         personalNote.value = '';
         removeSavedBtn.classList.add('hidden');
         saveProductBtn.textContent = 'Save to My List';
+        saveModalTitle.textContent = 'Save to My List';
         setSaveMessage('');
         savedList.innerHTML = '<p class="empty-message">No saved products yet</p>';
     }
 
     function bind() {
+        openSaveBtn.addEventListener('click', openModal);
+        closeSaveModal.addEventListener('click', closeModal);
         saveProductBtn.addEventListener('click', save);
         removeSavedBtn.addEventListener('click', remove);
+        saveModal.addEventListener('click', (e) => {
+            if (e.target === saveModal) closeModal();
+        });
     }
 
     return { loadList, showForCurrent, bind, reset };

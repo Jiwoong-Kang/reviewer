@@ -70,27 +70,11 @@
                         <p id="productInfo" class="product-info"></p>
                     </div>
                     <div class="user-bar">
+                        <button type="button" id="openSaveBtn" class="open-save-btn hidden">Save to My List</button>
                         <span id="authUserLabel" class="user-email"></span>
                         <button type="button" id="signOutBtn" class="auth-btn secondary sign-out-btn" onclick="Auth.signOut()">Sign Out</button>
                     </div>
                 </div>
-            </div>
-
-            <div id="savePanel" class="save-panel hidden">
-                <h3>Save to My List</h3>
-                <label for="interestLevel">Interest level</label>
-                <select id="interestLevel">
-                    <option value="interested">Interested</option>
-                    <option value="maybe">Maybe</option>
-                    <option value="not_for_me">Not for me</option>
-                </select>
-                <label for="personalNote">Personal note</label>
-                <textarea id="personalNote" rows="2" placeholder="Optional note for yourself..."></textarea>
-                <div class="save-actions">
-                    <button type="button" id="saveProductBtn" class="save-btn">Save to My List</button>
-                    <button type="button" id="removeSavedBtn" class="remove-saved-btn hidden">Remove</button>
-                </div>
-                <p id="saveMessage" class="save-message"></p>
             </div>
 
             <div id="chatContainer" class="chat-container">
@@ -110,6 +94,31 @@
                 />
                 <button id="sendBtn" disabled>Send</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Save to My List Modal -->
+    <div id="saveModal" class="modal">
+        <div class="modal-content save-modal-content">
+            <span class="close" id="closeSaveModal">&times;</span>
+            <h2 id="saveModalTitle">Save to My List</h2>
+            <div class="form-group">
+                <label for="interestLevel">Interest level</label>
+                <select id="interestLevel">
+                    <option value="interested">Interested</option>
+                    <option value="maybe">Maybe</option>
+                    <option value="not_for_me">Not for me</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="personalNote">Personal note</label>
+                <textarea id="personalNote" rows="3" placeholder="Optional note for yourself..."></textarea>
+            </div>
+            <div class="save-actions">
+                <button type="button" id="saveProductBtn" class="save-btn">Save to My List</button>
+                <button type="button" id="removeSavedBtn" class="remove-saved-btn hidden">Remove</button>
+            </div>
+            <p id="saveMessage" class="save-message"></p>
         </div>
     </div>
 
