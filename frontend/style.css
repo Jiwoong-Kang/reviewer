@@ -67,6 +67,69 @@ body {
     line-height: 1.5;
 }
 
+.login-card label {
+    display: block;
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.auth-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.auth-tab {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    background: #f8f9fa;
+    color: #555;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.auth-tab.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: transparent;
+    color: white;
+}
+
+.auth-form-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 12px;
+}
+
+.auth-switch {
+    margin-top: 12px;
+    font-size: 13px;
+    color: #666;
+    text-align: center;
+}
+
+.link-btn {
+    border: none;
+    background: none;
+    color: #667eea;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+    font-size: inherit;
+}
+
+.link-btn:hover {
+    text-decoration: underline;
+}
+
+.auth-btn.full {
+    width: 100%;
+    margin-top: 6px;
+}
+
 .login-card input {
     width: 100%;
     padding: 12px 14px;
@@ -98,17 +161,29 @@ body {
     color: #333;
 }
 
-.auth-message,
-.save-message {
+.auth-message {
     margin-top: 10px;
     font-size: 13px;
     color: #666;
     min-height: 18px;
 }
 
+.save-message {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #666;
+    min-height: 16px;
+}
+
 .auth-message.error,
 .save-message.error {
     color: #a13434;
+    white-space: pre-wrap;
+    line-height: 1.4;
+    font-weight: 600;
+    background: #fdf2f2;
+    padding: 10px 12px;
+    border-radius: 8px;
 }
 
 .header-top {
@@ -140,6 +215,9 @@ body {
     font-size: 13px;
     background: rgba(255, 255, 255, 0.95);
     color: #333;
+    cursor: pointer;
+    pointer-events: auto;
+    opacity: 1;
 }
 
 .saved-section {

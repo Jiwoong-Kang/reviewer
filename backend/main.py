@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import database
-from database import ProductDatabase, AuthService, SavedProductDatabase
+from database import ProductDatabase, AuthService, SavedProductDatabase, ChatHistoryDatabase
 
 app = FastAPI(title="Product Review Chat API")
 
@@ -49,8 +49,13 @@ class ProductUpload(BaseModel):
     image: Optional[str] = None
     reviews: List[Review]
 
-class AuthCredentials(BaseModel):
-    email: str
+class AuthSignUp(BaseModel):
+    name: str
+    username: str
+    password: str = Field(min_length=6)
+
+class AuthSignIn(BaseModel):
+    username: str
     password: str = Field(min_length=6)
 
 class SavedProductPayload(BaseModel):
@@ -68,22 +73,31 @@ def _bearer_token(authorization: Optional[str]) -> str:
     return token
 
 
+def _optional_bearer(authorization: Optional[str]) -> Optional[str]:
+    if not authorization:
+        return None
+    if not authorization.lower().startswith("bearer "):
+        return None
+    token = authorization.split(" ", 1)[1].strip()
+    return token or None
+
+
 @app.get("/")
 def root():
     return {"message": "Product Review Chat API", "version": "2.0.0", "database": "Supabase"}
 
 
 @app.post("/api/auth/signup")
-async def signup(creds: AuthCredentials):
-    result = AuthService.sign_up(creds.email.strip(), creds.password)
+async def signup(creds: AuthSignUp):
+    result = AuthService.sign_up(creds.name, creds.username, creds.password)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
     return result
 
 
 @app.post("/api/auth/signin")
-async def signin(creds: AuthCredentials):
-    result = AuthService.sign_in(creds.email.strip(), creds.password)
+async def signin(creds: AuthSignIn):
+    result = AuthService.sign_in(creds.username, creds.password)
     if result["status"] == "error":
         raise HTTPException(status_code=401, detail=result["message"])
     return result
@@ -105,6 +119,15 @@ async def me(authorization: Optional[str] = Header(None)):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     return {"status": "success", "user": user}
+
+
+@app.get("/api/chat/history/{product_id}")
+async def get_chat_history(product_id: str, authorization: Optional[str] = Header(None)):
+    token = _bearer_token(authorization)
+    result = ChatHistoryDatabase.list_messages(token, product_id)
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
 
 
 @app.get("/api/saved-products")
@@ -207,7 +230,7 @@ async def list_products():
     }
 
 @app.post("/api/chat")
-async def chat(message: ChatMessage):
+async def chat(message: ChatMessage, authorization: Optional[str] = Header(None)):
     """Answer questions about the product."""
     try:
         # Check if product exists
@@ -222,6 +245,21 @@ async def chat(message: ChatMessage):
             message.message,
             message.conversation_history
         )
+
+        # Persist Q&A for the logged-in user (best-effort)
+        token = _optional_bearer(authorization)
+        if token:
+            ChatHistoryDatabase.add_message(
+                token, message.product_id, "user", message.message
+            )
+            ChatHistoryDatabase.add_message(
+                token,
+                message.product_id,
+                "assistant",
+                result["answer"],
+                sources=result.get("sources") or [],
+                insufficient_evidence=bool(result.get("insufficient_evidence")),
+            )
         
         return {
             "status": "success",

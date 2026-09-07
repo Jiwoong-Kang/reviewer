@@ -1,12 +1,17 @@
 import os
+import re
 from supabase import create_client, Client
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 # Initialize Supabase client (server-side only; never ship service_role to the browser)
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(supabase_url, supabase_key)
+
+# Supabase Auth still needs an email under the hood; users only see username.
+INTERNAL_EMAIL_DOMAIN = "users.local"
+USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
 
 
 def _user_client(access_token: str) -> Client:
@@ -16,52 +21,124 @@ def _user_client(access_token: str) -> Client:
     return client
 
 
+def _normalize_username(username: str) -> str:
+    return (username or "").strip().lower()
+
+
+def _username_to_email(username: str) -> str:
+    return f"{_normalize_username(username)}@{INTERNAL_EMAIL_DOMAIN}"
+
+
+def _validate_username(username: str) -> Optional[str]:
+    if not USERNAME_RE.match(username or ""):
+        return "Username must be 3–30 characters: letters, numbers, underscore only."
+    return None
+
+
+def _user_payload(user) -> Dict:
+    meta = getattr(user, "user_metadata", None) or {}
+    if not isinstance(meta, dict):
+        meta = {}
+    username = meta.get("username") or ""
+    if not username and getattr(user, "email", None):
+        email = user.email or ""
+        if email.endswith(f"@{INTERNAL_EMAIL_DOMAIN}"):
+            username = email.split("@", 1)[0]
+    return {
+        "id": user.id,
+        "username": username,
+        "name": meta.get("display_name") or meta.get("name") or username,
+    }
+
+
 class AuthService:
-    """Email/password auth via Supabase Auth."""
+    """Username/password auth via Supabase (synthetic internal email, no email UX)."""
 
     @staticmethod
-    def sign_up(email: str, password: str) -> Dict:
+    def sign_up(name: str, username: str, password: str) -> Dict:
         try:
-            result = supabase.auth.sign_up({"email": email, "password": password})
+            username = _normalize_username(username)
+            name = (name or "").strip()
+            err = _validate_username(username)
+            if err:
+                return {"status": "error", "message": err}
+            if not name:
+                return {"status": "error", "message": "Name is required"}
+            if len(password or "") < 6:
+                return {"status": "error", "message": "Password must be at least 6 characters"}
+
+            result = supabase.auth.sign_up({
+                "email": _username_to_email(username),
+                "password": password,
+                "options": {
+                    "data": {
+                        "display_name": name,
+                        "username": username,
+                    }
+                },
+            })
             session = result.session
             user = result.user
             if not user:
                 return {"status": "error", "message": "Sign up failed"}
             if not session:
                 return {
-                    "status": "success",
-                    "needs_email_confirmation": True,
-                    "message": "Check your email to confirm your account before signing in.",
-                    "user": {"id": user.id, "email": user.email},
+                    "status": "error",
+                    "message": (
+                        "Account was created but no session was returned. "
+                        "In Supabase Authentication settings, disable Confirm email, "
+                        "then delete this user and try Sign Up again."
+                    ),
                 }
             return {
                 "status": "success",
-                "needs_email_confirmation": False,
                 "access_token": session.access_token,
                 "refresh_token": session.refresh_token,
-                "user": {"id": user.id, "email": user.email},
+                "user": _user_payload(user),
             }
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            message = str(e)
+            lower = message.lower()
+            if "already" in lower or "registered" in lower:
+                return {"status": "error", "message": "That username is already taken"}
+            return {"status": "error", "message": message}
 
     @staticmethod
-    def sign_in(email: str, password: str) -> Dict:
+    def sign_in(username: str, password: str) -> Dict:
         try:
-            result = supabase.auth.sign_in_with_password(
-                {"email": email, "password": password}
-            )
+            username = _normalize_username(username)
+            err = _validate_username(username)
+            if err:
+                return {"status": "error", "message": err}
+            result = supabase.auth.sign_in_with_password({
+                "email": _username_to_email(username),
+                "password": password,
+            })
             session = result.session
             user = result.user
             if not session or not user:
-                return {"status": "error", "message": "Invalid email or password"}
+                return {"status": "error", "message": "Invalid username or password"}
             return {
                 "status": "success",
                 "access_token": session.access_token,
                 "refresh_token": session.refresh_token,
-                "user": {"id": user.id, "email": user.email},
+                "user": _user_payload(user),
             }
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            message = str(e)
+            lower = message.lower()
+            if "email not confirmed" in lower:
+                return {
+                    "status": "error",
+                    "message": (
+                        "This account still needs email confirmation in Supabase. "
+                        "Disable Confirm email, delete the user under Authentication → Users, "
+                        "then Sign Up again."
+                    ),
+                }
+            if "invalid" in lower:
+                return {"status": "error", "message": "Invalid username or password"}
+            return {"status": "error", "message": message}
 
     @staticmethod
     def sign_out(access_token: str) -> Dict:
@@ -79,10 +156,61 @@ class AuthService:
             user = result.user
             if not user:
                 return None
-            return {"id": user.id, "email": user.email}
+            return _user_payload(user)
         except Exception as e:
             print(f"Error getting user: {e}")
             return None
+
+
+class ChatHistoryDatabase:
+    """Per-user, per-product chat messages (RLS via user JWT)."""
+
+    @staticmethod
+    def list_messages(access_token: str, product_id: str) -> Dict:
+        try:
+            user = AuthService.get_user(access_token)
+            if not user:
+                return {"status": "error", "message": "Unauthorized"}
+            client = _user_client(access_token)
+            result = (
+                client.table("chat_messages")
+                .select("id, role, content, sources, insufficient_evidence, created_at")
+                .eq("product_id", product_id)
+                .order("created_at", desc=False)
+                .execute()
+            )
+            return {"status": "success", "messages": result.data or []}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @staticmethod
+    def add_message(
+        access_token: str,
+        product_id: str,
+        role: str,
+        content: str,
+        sources: Optional[List[Any]] = None,
+        insufficient_evidence: bool = False,
+    ) -> Dict:
+        try:
+            user = AuthService.get_user(access_token)
+            if not user:
+                return {"status": "error", "message": "Unauthorized"}
+            if role not in ("user", "assistant"):
+                return {"status": "error", "message": "Invalid role"}
+            client = _user_client(access_token)
+            payload = {
+                "user_id": user["id"],
+                "product_id": product_id,
+                "role": role,
+                "content": content,
+                "sources": sources or [],
+                "insufficient_evidence": bool(insufficient_evidence),
+            }
+            result = client.table("chat_messages").insert(payload).execute()
+            return {"status": "success", "message": result.data[0] if result.data else payload}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
 
 
 class SavedProductDatabase:
