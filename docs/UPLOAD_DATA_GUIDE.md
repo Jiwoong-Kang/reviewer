@@ -7,7 +7,7 @@ This guide shows you how to upload the sample products (MacBook Pro and iPhone) 
 Before uploading data:
 
 1. ✅ Supabase project created
-2. ✅ Database table created (run `backend/supabase_setup.sql`)
+2. ✅ Database table created (run `backend/sql/supabase_setup.sql`)
 3. ✅ `.env` file configured with Supabase credentials
 4. ✅ Backend server dependencies installed
 5. ✅ Product images in `frontend/images/` folder
@@ -213,7 +213,7 @@ cat backend/.env
 **Solution:**
 ```bash
 # Run the SQL script in Supabase SQL Editor
-# Copy contents from: backend/supabase_setup.sql
+# Copy contents from: backend/sql/supabase_setup.sql
 # Paste and run in: Supabase Dashboard → SQL Editor
 ```
 

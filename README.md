@@ -18,12 +18,14 @@ reviewer/
 │   ├── main.py          # API server
 │   ├── vector_store.py  # Vector DB (ChromaDB)
 │   ├── chat_engine.py   # RAG chatbot logic
+│   ├── sql/             # Supabase SQL scripts
 │   ├── requirements.txt # Python dependencies
 │   └── .env.example     # Environment variables example
 ├── frontend/            # Web frontend
 │   ├── index.html       # Main page
 │   ├── style.css        # Styles
 │   └── app.js           # JavaScript logic
+├── docs/                # Setup & usage guides
 └── README.md
 ```
 
@@ -42,10 +44,12 @@ pip install -r requirements.txt
 
 1. Create a Supabase account at https://supabase.com
 2. Create a new project
-3. Run the SQL script in `backend/supabase_setup.sql`
+3. Run the SQL script in `backend/sql/supabase_setup.sql`
 4. Copy your Project URL and API Key
 
-See detailed instructions in `SUPABASE_SETUP.md`
+See detailed instructions in [`docs/SUPABASE_SETUP.md`](docs/SUPABASE_SETUP.md)
+
+More guides: [`docs/QUICK_START.md`](docs/QUICK_START.md) · [`docs/SETUP_GUIDE.md`](docs/SETUP_GUIDE.md) · [`docs/UPLOAD_DATA_GUIDE.md`](docs/UPLOAD_DATA_GUIDE.md)
 
 ### 3. Environment Variables Setup
 

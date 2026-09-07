@@ -27,7 +27,7 @@ This guide will help you set up Supabase as the database for your Product Review
 
 1. In your Supabase project dashboard, click **"SQL Editor"** (left sidebar)
 2. Click **"New Query"**
-3. Copy and paste the SQL from `backend/supabase_setup.sql`:
+3. Copy and paste the SQL from `backend/sql/supabase_setup.sql`:
 
 ```sql
 -- Create products table

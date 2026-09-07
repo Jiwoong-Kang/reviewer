@@ -170,4 +170,4 @@ Once the system works properly:
 3. **Connect database**: Build persistent storage
 4. **Production deployment**: Launch actual service
 
-See `SETUP_GUIDE.md` for more details!
+See [`SETUP_GUIDE.md`](SETUP_GUIDE.md) for more details!
