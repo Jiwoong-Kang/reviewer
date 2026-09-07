@@ -1,161 +1,133 @@
-# Product Review Chatbot System
+# Product Review Chatbot
 
-An AI chatbot system that learns from product reviews and descriptions to answer user questions.
+RAG chatbot that answers product questions from real user reviews, with citations, auth, saved products, and per-user chat history.
 
-## 🌟 Key Features
+## Features
 
-- **Product Information Learning**: Learn from product descriptions and multiple user reviews
-- **Natural Language Q&A**: Answer product questions naturally like ChatGPT
-- **RAG Pattern**: Generate accurate answers based on actual review data
-- **Conversational Interface**: Continuous conversation that understands previous context
-- **Multi-Product Support**: Register and switch between multiple products
+- **RAG Q&A**: Retrieves the most relevant reviews (Chroma), then answers with GPT
+- **Review citations**: Answers cite source reviews; UI shows the supporting snippets
+- **Auth gate**: Username / display name / password (Supabase Auth under the hood)
+- **Saved products**: Interest level + personal note per user
+- **Chat history**: Stored in Supabase per user + product (not localStorage)
+- **Sample catalog**: MacBook Pro M3 and iPhone 15 Pro Max (20 reviews each)
 
-## 🏗️ System Architecture
+## Architecture
 
 ```
 reviewer/
-├── backend/              # FastAPI backend
-│   ├── main.py          # API server
-│   ├── vector_store.py  # Vector DB (ChromaDB)
-│   ├── chat_engine.py   # RAG chatbot logic
-│   ├── sql/             # Supabase SQL scripts
-│   ├── requirements.txt # Python dependencies
-│   └── .env.example     # Environment variables example
-├── frontend/            # Web frontend
-│   ├── index.html       # Main page
-│   ├── style.css        # Styles
-│   └── app.js           # JavaScript logic
-├── docs/                # Setup & usage guides
+├── backend/
+│   ├── main.py              # FastAPI app (CORS + routers)
+│   ├── chat_engine.py       # RAG generation + citations
+│   ├── vector_store.py      # Chroma embeddings / similarity search
+│   ├── upload_sample_data.py
+│   ├── database/            # Supabase client, auth, products, saved, chat history
+│   ├── routers/             # auth, products, saved, chat
+│   ├── sql/                 # Run these in Supabase SQL Editor
+│   ├── requirements.txt
+│   └── env_example.txt
+├── frontend/
+│   ├── index.html
+│   ├── style.css
+│   ├── app.js               # Boot
+│   ├── auth.js / products.js / chat.js / saved.js
+│   └── images/
+├── docs/                    # Setup guides
+├── sample_products.json
 └── README.md
 ```
 
-## 🚀 Installation and Execution
+**Data roles**
 
-### 1. Python Environment Setup
+| Store | Role |
+|-------|------|
+| **Supabase** | Products, reviews (source of truth), auth, saved products, chat messages |
+| **Chroma** | Vector index for retrieving top relevant reviews at chat time |
+| **OpenAI** | Answer generation from retrieved context |
+| **localStorage** | Auth session only |
+
+Chroma is the demo vector layer for RAG. After a backend restart, re-run `upload_sample_data.py` (with the server running) so embeddings exist again.
+
+## Quick setup
+
+### 1. Backend
 
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+python3 -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-### 2. Supabase Setup
-
-1. Create a Supabase account at https://supabase.com
-2. Create a new project
-3. Run the SQL script in `backend/sql/supabase_setup.sql`
-4. Copy your Project URL and API Key
-
-See detailed instructions in [`docs/SUPABASE_SETUP.md`](docs/SUPABASE_SETUP.md)
-
-More guides: [`docs/QUICK_START.md`](docs/QUICK_START.md) · [`docs/SETUP_GUIDE.md`](docs/SETUP_GUIDE.md) · [`docs/UPLOAD_DATA_GUIDE.md`](docs/UPLOAD_DATA_GUIDE.md)
-
-### 3. Environment Variables Setup
-
-```bash
-# Create .env file
 cp env_example.txt .env
-
-# Edit .env file and add:
-# - OpenAI API key
-# - Supabase URL
-# - Supabase anon key
+# Edit .env: OPENAI_API_KEY, SUPABASE_URL, SUPABASE_KEY
 ```
 
-### 4. Run Backend Server
+### 2. Supabase
+
+In the Supabase SQL Editor, run **in order**:
+
+1. `backend/sql/supabase_setup.sql` — products
+2. `backend/sql/saved_products_setup.sql` — saved products + RLS
+3. `backend/sql/chat_history_setup.sql` — chat messages + RLS
+
+Also under **Authentication → Providers → Email**:
+
+- Enable Email provider
+- For local testing, **disable Confirm email**
+
+Details: [`docs/SUPABASE_SETUP.md`](docs/SUPABASE_SETUP.md)
+
+### 3. Run
 
 ```bash
-cd backend
-source venv/bin/activate
-python main.py
+# Terminal 1 — API
+cd backend && source venv/bin/activate && python main.py
+# → http://localhost:8000
+
+# Terminal 2 — sample products + embeddings (server must be running)
+cd backend && source venv/bin/activate && python upload_sample_data.py
+
+# Terminal 3 — UI
+cd frontend && python3 -m http.server 3000
+# → http://localhost:3000
 ```
 
-Server will run at `http://localhost:8000`.
+### 4. Use the app
 
-### 5. Run Frontend
+1. Sign up with **username** (`[a-zA-Z0-9_]{3,30}`), name, password — not an email address
+2. Select a product and ask questions (e.g. battery life, pros/cons)
+3. Optionally save the product with interest level + note
+4. Switch products — chat history restores from Supabase
 
-Run frontend with a simple HTTP server:
+## Docs
 
-```bash
-cd frontend
-python -m http.server 3000
-```
+| Guide | Contents |
+|-------|----------|
+| [`docs/QUICK_START.md`](docs/QUICK_START.md) | Minimal run path |
+| [`docs/SUPABASE_SETUP.md`](docs/SUPABASE_SETUP.md) | Project, SQL, auth settings |
+| [`docs/UPLOAD_DATA_GUIDE.md`](docs/UPLOAD_DATA_GUIDE.md) | Sample data upload |
+| [`docs/SETUP_GUIDE.md`](docs/SETUP_GUIDE.md) | Ops notes & troubleshooting |
 
-Access `http://localhost:3000` in your browser
+## Tech stack
 
-## 📝 How to Use
+- **Backend**: FastAPI, OpenAI GPT-4o-mini, ChromaDB, Sentence Transformers, Supabase
+- **Frontend**: Vanilla JS (modular), HTML/CSS
 
-### 1. Upload Product
+## API (overview)
 
-- Click "Upload Product" button in the left sidebar
-- Enter product information:
-  - Product ID (unique value)
-  - Product name
-  - Product description
-  - Review list (JSON format)
+Swagger: `http://localhost:8000/docs`
 
-**Review JSON Example:**
-```json
-[
-  {
-    "review_id": "r1",
-    "content": "Fast delivery and great quality!",
-    "rating": 5.0,
-    "date": "2024-01-15"
-  },
-  {
-    "review_id": "r2",
-    "content": "Good value for price but a bit noisy",
-    "rating": 4.0,
-    "date": "2024-01-20"
-  }
-]
-```
+| Area | Endpoints |
+|------|-----------|
+| Auth | `POST /api/auth/signup`, `/signin`, `/signout`, `GET /api/auth/me` |
+| Products | `GET/POST/DELETE /api/products...` |
+| Saved | `GET/POST/DELETE /api/saved-products...` |
+| Chat | `POST /api/chat`, `GET /api/chat/history/{product_id}` |
 
-### 2. Select Product and Chat
-
-- Click on a product from the left product list
-- Enter your question in the bottom input field
-- Example questions:
-  - "What are the advantages of this product?"
-  - "How is the battery life?"
-  - "Who would you recommend this to?"
-  - "What are the disadvantages?"
-
-## 🛠️ Tech Stack
-
-### Backend
-- **FastAPI**: High-performance Python web framework
-- **OpenAI GPT-4o-mini**: Natural language generation
-- **Supabase**: PostgreSQL database (cloud-hosted)
-- **ChromaDB**: Vector database for embeddings
-- **Sentence Transformers**: Korean embeddings (ko-sroberta-multitask)
-
-### Frontend
-- **Vanilla JavaScript**: Lightweight SPA
-- **HTML5/CSS3**: Modern UI/UX
-
-## 📚 API Documentation
-
-Auto-generated API documentation after running the backend server:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-### Main Endpoints
-
-- `POST /api/products/upload` - Upload product
-- `GET /api/products` - Get product list
-- `GET /api/products/{product_id}` - Get product details
-- `POST /api/chat` - Chatbot conversation
-- `DELETE /api/products/{product_id}` - Delete product
-
-## 🔧 Development Environment
+## Requirements
 
 - Python 3.9+
-- Node.js 16+ (optional)
-- OpenAI API key required
+- OpenAI API key
+- Supabase project (URL + **anon** key)
 
-## 📄 License
+## License
 
-MIT License
+MIT

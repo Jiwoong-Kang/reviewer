@@ -1,348 +1,79 @@
-# 🔧 Additional Setup and Required Information
+# Setup Guide
 
-This document organizes additional information needed to actually operate the system.
+Operational notes for running and debugging the current stack.
 
-## ✅ Required Setup Items
+## Required credentials
 
-### 1. OpenAI API Key Issuance ⭐⭐⭐
+### OpenAI
 
-**Where**: https://platform.openai.com/api-keys
+1. https://platform.openai.com/api-keys → create a secret key
+2. Put it in `backend/.env` as `OPENAI_API_KEY`
 
-**Procedure**:
-1. Create OpenAI account (https://platform.openai.com)
-2. Go to API Keys menu
-3. Click "Create new secret key"
-4. Copy the generated key and save in `backend/.env` file
+Model used: `gpt-4o-mini` in `backend/chat_engine.py` (change there if you want another model).
 
-**Cost**:
-- GPT-4o-mini: ~$0.15 / 1M input tokens, $0.60 / 1M output tokens
-- Estimated cost: ~$0.001~0.005 per conversation (very affordable)
+### Supabase
 
-**Alternatives**:
-- Use GPT-3.5-turbo for cheaper option (slightly lower performance)
-- Change `model="gpt-4o-mini"` to `model="gpt-3.5-turbo"` in `backend/chat_engine.py`
+1. Project URL + **anon** key in `.env`
+2. Run SQL in order (see [SUPABASE_SETUP.md](SUPABASE_SETUP.md)):
+   - `backend/sql/supabase_setup.sql`
+   - `backend/sql/saved_products_setup.sql`
+   - `backend/sql/chat_history_setup.sql`
+3. Email auth on; **Confirm email off** for local demos
 
 ---
 
-## 📊 Additional Improvements
+## How the pieces fit
 
-### 1. Integrate Actual Database
+| Piece | What it stores / does |
+|-------|------------------------|
+| Supabase `products` | Shared catalog + review JSON (source of truth) |
+| Supabase `saved_products` | Per-user interest + note |
+| Supabase `chat_messages` | Per-user chat history + citation payloads |
+| Chroma | Embedding index for top-k review retrieval (RAG) |
+| localStorage | Auth session JWT only |
 
-**Current Status**: In-memory storage (data loss on server restart)
-
-**Recommended Improvement**:
-- Connect PostgreSQL or MongoDB
-- Use SQLAlchemy or Motor
-
-**Required Work**:
-```python
-# Add to requirements.txt
-sqlalchemy==2.0.25
-psycopg2-binary==2.9.9
-
-# Or MongoDB
-motor==3.3.2
-```
-
-### 2. Collect Real Reviews via Crawling
-
-**Required Work**:
-- Crawl reviews from shopping sites
-- Recommended libraries: Selenium, BeautifulSoup, Scrapy
-
-**Precautions**:
-- Check site terms of service
-- Follow robots.txt
-- Limit crawling speed
-
-**Example code to add**:
-```python
-# Create crawler.py file
-import requests
-from bs4 import BeautifulSoup
-
-def crawl_reviews(product_url):
-    # Implementation needed
-    pass
-```
-
-### 3. User Authentication System
-
-**Need**: 
-- Multiple users managing their own products
-- Usage tracking
-
-**Recommended Technology**:
-- JWT token authentication
-- OAuth2 (Google, Facebook login)
-
-**Required Libraries**:
-```bash
-pip install python-jose[cryptography]
-pip install passlib[bcrypt]
-```
-
-### 4. Production Deployment
-
-**Backend Deployment Options**:
-- **Heroku**: Simple but paid
-- **Railway**: Free plan available
-- **AWS EC2**: Flexible but complex setup
-- **Docker**: Containerization recommended
-
-**Frontend Deployment Options**:
-- **Vercel**: Free, automatic deployment
-- **Netlify**: Free, CDN provided
-- **GitHub Pages**: Static hosting
-
-**Docker setup needed**:
-```dockerfile
-# Create Dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
+Chat answers use retrieved reviews only; conflicting reviews should be summarized with citations (see system prompt in `chat_engine.py`).
 
 ---
 
-## 🔍 Data Collection Methods
+## Auth UX notes
 
-### Option 1: Manual Input
-- Copy/paste reviews from product pages
-- Convert to JSON format
-
-### Option 2: Automated Crawling
-**Crawlable Sites**:
-- Amazon, eBay, various shopping platforms
-- Different crawler needed for each site
-
-**Crawling Tools**:
-```bash
-pip install selenium
-pip install beautifulsoup4
-pip install scrapy
-```
-
-### Option 3: Use APIs
-**When Available**:
-- Amazon Product API
-- Other e-commerce APIs (limited)
+- Users sign up with **username**, not email
+- Backend maps username → `username@users.local` for Supabase Auth
+- Valid username: `[a-zA-Z0-9_]{3,30}`
+- After API/auth changes, restart the backend
+- Stuck “email not confirmed” users: delete in Supabase Auth → Users, sign up again
 
 ---
 
-## 🚀 Performance Optimization
+## Chroma / RAG demo notes
 
-### 1. Caching System
-**Add Redis**:
-```bash
-pip install redis
-```
-
-**Usage**:
-- Cache frequently asked question answers
-- Cache API responses
-
-### 2. Asynchronous Processing
-**Add Celery**:
-```bash
-pip install celery[redis]
-```
-
-**Usage**:
-- Bulk review embedding tasks
-- Background job processing
-
-### 3. Load Balancing
-- Multiple server instances
-- Nginx reverse proxy
+- Chroma backs similarity search so the demo shows a real RAG path
+- Process-local index: **restarting the API clears embeddings** even if Supabase still has products
+- Fix for local use: with the server running, `python upload_sample_data.py` (or re-upload a product via the UI)
+- Production-minded next steps (not implemented): durable Chroma persist, rebuild-from-Supabase on startup, or pgvector in Supabase
 
 ---
 
-## 📱 Mobile App Extension
+## Common failures
 
-### React Native App
-**Required Work**:
-```bash
-npx react-native init ReviewChatApp
-```
-
-### Flutter App
-**Required Work**:
-```bash
-flutter create review_chat_app
-```
+| Symptom | Check |
+|---------|--------|
+| FastAPI / module import errors | `source venv/bin/activate`; broken venv → recreate |
+| Chat empty / “no reviews indexed” | Embeddings missing after restart → re-run upload script |
+| Vague “mixed / unclear” answers | Prompt/rules in `chat_engine.py` (should cite both sides) |
+| Saved / history HTTP 400 | Missing SQL tables or RLS |
+| Signup / sign-in fails | Confirm email disabled? Username format? Backend restarted? |
+| OpenAI 429 | Billing / rate limits on the OpenAI account |
+| CORS | Frontend origin must be allowed; default local ports 3000 → 8000 |
 
 ---
 
-## 🔐 Security Enhancement
+## Optional later improvements
 
-### 1. API Rate Limiting
-```python
-# Add to requirements.txt
-slowapi==0.1.9
+- Persist or auto-rebuild the vector index
+- Stricter RLS on `products` for production
+- Deploy API (Railway, Fly, etc.) + static frontend (Vercel/Netlify)
+- Rate limiting / HTTPS at the reverse proxy
 
-# Add to main.py
-from slowapi import Limiter
-limiter = Limiter(key_func=get_remote_address)
-```
-
-### 2. HTTPS Setup
-- Free SSL certificate from Let's Encrypt
-- Nginx SSL configuration
-
-### 3. API Key Protection
-- Use environment variables (currently applied)
-- AWS Secrets Manager or HashiCorp Vault
-
----
-
-## 📈 Monitoring and Analytics
-
-### 1. Logging System
-```python
-# Add to requirements.txt
-loguru==0.7.2
-```
-
-### 2. Analytics Tools
-- **Sentry**: Error tracking
-- **Google Analytics**: User analytics
-- **Mixpanel**: Event tracking
-
-### 3. Metrics Collection
-```python
-# Add to requirements.txt
-prometheus-client==0.19.0
-```
-
----
-
-## 🎨 UI/UX Improvements
-
-### 1. Advanced Frontend Framework
-
-**Refactor with React**:
-```bash
-npx create-react-app frontend-react
-```
-
-**Refactor with Vue.js**:
-```bash
-npm create vue@latest
-```
-
-### 2. Component Libraries
-- **Material-UI**: React components
-- **Tailwind CSS**: Utility CSS
-- **Chakra UI**: Accessibility-focused
-
----
-
-## 💡 Additional Feature Ideas
-
-### 1. Review Sentiment Analysis
-- Visualize positive/negative ratio
-- Extract key keywords
-
-### 2. Product Comparison Feature
-- Compare multiple products simultaneously
-- Generate pros/cons table
-
-### 3. Automatic Review Summary Generation
-- Summarize all reviews at a glance
-- Main opinions by rating
-
-### 4. Notification System
-- New review alerts
-- Price change notifications
-
-### 5. Voice Interface
-- Ask questions by voice
-- Read answers via TTS
-
----
-
-## 📚 Learning Resources
-
-### FastAPI
-- Official docs: https://fastapi.tiangolo.com
-- Tutorial: https://fastapi.tiangolo.com/tutorial/
-
-### OpenAI API
-- Official docs: https://platform.openai.com/docs
-- Pricing: https://openai.com/pricing
-
-### ChromaDB
-- Official docs: https://docs.trychroma.com
-- GitHub: https://github.com/chroma-core/chroma
-
-### RAG Pattern
-- LangChain docs: https://python.langchain.com
-- RAG explanation: https://www.pinecone.io/learn/retrieval-augmented-generation/
-
----
-
-## ❓ Frequently Asked Questions
-
-### Q: Concerned about OpenAI API costs
-**A**: Using GPT-3.5-turbo costs less than $0.001 per conversation, very affordable. Even 5,000 conversations per month would be under $5.
-
-### Q: Worried about performance in other languages
-**A**: 
-- Embeddings: Use appropriate multilingual models
-- Answer generation: GPT-4o/GPT-3.5 support multiple languages well
-
-### Q: How much do server costs run?
-**A**:
-- Free options: Railway, Render free plans
-- Paid: AWS EC2 t3.micro ~$10/month
-- ChromaDB uses local file storage with no additional cost
-
-### Q: Want to test without crawling?
-**A**: 
-- Enter sample data directly
-- Or create and import `sample_data.json` file
-
----
-
-## 🆘 Troubleshooting
-
-### ChromaDB Installation Error
-```bash
-# For M1/M2 Mac
-pip install chromadb --no-binary :all:
-```
-
-### Sentence Transformers Slow
-```bash
-# CUDA support (if NVIDIA GPU available)
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-```
-
-### CORS Error
-- Check CORS settings in `backend/main.py`
-- Verify frontend URL is included in allow_origins
-
----
-
-## 📞 Support and Contribution
-
-This project is a basic template.
-Customization needed for actual use environment.
-
-**Next Steps**:
-1. Issue and configure OpenAI API key
-2. Prepare actual product data
-3. Test locally
-4. Develop additional features as needed
-5. Production deployment
-
-**Development Priority**:
-1. 🔴 Required: OpenAI API key setup
-2. 🟡 Recommended: Integrate actual DB (PostgreSQL/MongoDB)
-3. 🟢 Optional: Automate crawling
-4. 🟢 Optional: User authentication
-5. 🟢 Optional: Production deployment
+These are optional; the app already uses Supabase for persistence and Auth for multi-user saved products and history.
