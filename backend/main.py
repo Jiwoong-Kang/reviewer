@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import os
 from datetime import datetime
@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import database
-from database import ProductDatabase
+from database import ProductDatabase, AuthService, SavedProductDatabase
 
 app = FastAPI(title="Product Review Chat API")
 
@@ -49,9 +49,108 @@ class ProductUpload(BaseModel):
     image: Optional[str] = None
     reviews: List[Review]
 
+class AuthCredentials(BaseModel):
+    email: str
+    password: str = Field(min_length=6)
+
+class SavedProductPayload(BaseModel):
+    product_id: str
+    interest_level: str
+    personal_note: Optional[str] = ""
+
+
+def _bearer_token(authorization: Optional[str]) -> str:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing access token")
+    return token
+
+
 @app.get("/")
 def root():
     return {"message": "Product Review Chat API", "version": "2.0.0", "database": "Supabase"}
+
+
+@app.post("/api/auth/signup")
+async def signup(creds: AuthCredentials):
+    result = AuthService.sign_up(creds.email.strip(), creds.password)
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
+
+
+@app.post("/api/auth/signin")
+async def signin(creds: AuthCredentials):
+    result = AuthService.sign_in(creds.email.strip(), creds.password)
+    if result["status"] == "error":
+        raise HTTPException(status_code=401, detail=result["message"])
+    return result
+
+
+@app.post("/api/auth/signout")
+async def signout(authorization: Optional[str] = Header(None)):
+    token = _bearer_token(authorization)
+    result = AuthService.sign_out(token)
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
+
+
+@app.get("/api/auth/me")
+async def me(authorization: Optional[str] = Header(None)):
+    token = _bearer_token(authorization)
+    user = AuthService.get_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    return {"status": "success", "user": user}
+
+
+@app.get("/api/saved-products")
+async def list_saved_products(authorization: Optional[str] = Header(None)):
+    token = _bearer_token(authorization)
+    result = SavedProductDatabase.list_saved(token)
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
+
+
+@app.get("/api/saved-products/{product_id}")
+async def get_saved_product(product_id: str, authorization: Optional[str] = Header(None)):
+    token = _bearer_token(authorization)
+    result = SavedProductDatabase.get_saved_for_product(token, product_id)
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
+
+
+@app.post("/api/saved-products")
+async def save_product(payload: SavedProductPayload, authorization: Optional[str] = Header(None)):
+    token = _bearer_token(authorization)
+    result = SavedProductDatabase.upsert_saved(
+        token,
+        payload.product_id,
+        payload.interest_level,
+        payload.personal_note or "",
+    )
+    if result["status"] == "error":
+        status = 404 if result["message"] == "Product not found" else 400
+        if result["message"] == "Unauthorized":
+            status = 401
+        raise HTTPException(status_code=status, detail=result["message"])
+    return result
+
+
+@app.delete("/api/saved-products/{product_id}")
+async def unsave_product(product_id: str, authorization: Optional[str] = Header(None)):
+    token = _bearer_token(authorization)
+    result = SavedProductDatabase.delete_saved(token, product_id)
+    if result["status"] == "error":
+        status = 401 if result["message"] == "Unauthorized" else 400
+        raise HTTPException(status_code=status, detail=result["message"])
+    return result
+
 
 @app.post("/api/products/upload")
 async def upload_product(product: ProductUpload):
@@ -118,7 +217,7 @@ async def chat(message: ChatMessage):
         
         # Generate response using RAG pattern
         from chat_engine import generate_response
-        response = generate_response(
+        result = generate_response(
             message.product_id,
             message.message,
             message.conversation_history
@@ -126,7 +225,9 @@ async def chat(message: ChatMessage):
         
         return {
             "status": "success",
-            "response": response,
+            "response": result["answer"],
+            "sources": result["sources"],
+            "insufficient_evidence": result["insufficient_evidence"],
             "product_id": message.product_id
         }
     except Exception as e:

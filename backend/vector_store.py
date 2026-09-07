@@ -53,7 +53,10 @@ def create_embeddings(product_id: str, description: str, reviews: List[dict]):
             "type": "review",
             "product_id": product_id,
             "review_id": review.get('review_id', f"review_{idx}"),
-            "rating": str(review.get('rating', 'N/A'))
+            "rating": str(review.get('rating', 'N/A')),
+            # ChromaDB metadata cannot hold None, so unknown dates are stored empty
+            "date": str(review.get('date') or ""),
+            "index": idx
         })
         ids.append(f"{product_id}_review_{idx}")
     
@@ -89,13 +92,14 @@ def search_similar_content(product_id: str, query: str, top_k: int = 5):
         )
         
         return {
+            "ids": results['ids'][0] if results['ids'] else [],
             "documents": results['documents'][0] if results['documents'] else [],
             "metadatas": results['metadatas'][0] if results['metadatas'] else [],
             "distances": results['distances'][0] if results['distances'] else []
         }
     except Exception as e:
         print(f"Error searching: {e}")
-        return {"documents": [], "metadatas": [], "distances": []}
+        return {"ids": [], "documents": [], "metadatas": [], "distances": []}
 
 def delete_embeddings(product_id: str):
     """Delete embeddings for a product."""

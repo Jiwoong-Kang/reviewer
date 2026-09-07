@@ -7,7 +7,25 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
+    <!-- Login gate (required before chatbot) -->
+    <div id="loginView" class="login-view">
+        <div class="login-card">
+            <h1>Product Review Chatbot</h1>
+            <p class="login-subtitle">Sign in to browse products, chat about reviews, and save your list.</p>
+
+            <input type="email" id="authEmail" placeholder="Email" autocomplete="username">
+            <input type="password" id="authPassword" placeholder="Password (min 6)" autocomplete="current-password">
+
+            <div class="auth-actions">
+                <button type="button" id="signInBtn" class="auth-btn">Sign In</button>
+                <button type="button" id="signUpBtn" class="auth-btn secondary">Sign Up</button>
+            </div>
+            <p id="authMessage" class="auth-message"></p>
+        </div>
+    </div>
+
+    <!-- Main app (shown only when logged in) -->
+    <div id="appView" class="container hidden">
         <!-- Sidebar -->
         <div class="sidebar">
             <h2>📦 Products</h2>
@@ -15,13 +33,45 @@
                 <p class="empty-message">Upload a product</p>
             </div>
             <button id="uploadBtn" class="upload-btn">+ Upload Product</button>
+
+            <div class="saved-section">
+                <h2>My Saved Products</h2>
+                <div id="savedList" class="saved-list">
+                    <p class="empty-message">No saved products yet</p>
+                </div>
+            </div>
         </div>
 
         <!-- Main Chat Area -->
         <div class="main-content">
             <div class="header">
-                <h1 id="productName">Select a product</h1>
-                <p id="productInfo" class="product-info"></p>
+                <div class="header-top">
+                    <div>
+                        <h1 id="productName">Select a product</h1>
+                        <p id="productInfo" class="product-info"></p>
+                    </div>
+                    <div class="user-bar">
+                        <span id="authUserEmail" class="user-email"></span>
+                        <button type="button" id="signOutBtn" class="auth-btn secondary sign-out-btn">Sign Out</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="savePanel" class="save-panel hidden">
+                <h3>Save to My List</h3>
+                <label for="interestLevel">Interest level</label>
+                <select id="interestLevel">
+                    <option value="interested">Interested</option>
+                    <option value="maybe">Maybe</option>
+                    <option value="not_for_me">Not for me</option>
+                </select>
+                <label for="personalNote">Personal note</label>
+                <textarea id="personalNote" rows="2" placeholder="Optional note for yourself..."></textarea>
+                <div class="save-actions">
+                    <button type="button" id="saveProductBtn" class="save-btn">Save to My List</button>
+                    <button type="button" id="removeSavedBtn" class="remove-saved-btn hidden">Remove</button>
+                </div>
+                <p id="saveMessage" class="save-message"></p>
             </div>
 
             <div id="chatContainer" class="chat-container">
@@ -90,7 +140,7 @@
         </div>
     </div>
 
+    <script src="auth.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
-

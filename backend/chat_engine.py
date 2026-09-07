@@ -1,21 +1,36 @@
 import os
-from typing import List, Optional
+import re
+from typing import Dict, List, Optional
 from openai import OpenAI
 from vector_store import search_similar_content, get_all_reviews_summary
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "your-api-key-here"))
 
+# The model emits this on the first line when the context cannot answer the question
+INSUFFICIENT_EVIDENCE_TOKEN = "INSUFFICIENT_EVIDENCE"
+
+NO_EVIDENCE_MESSAGE = "I don't have any reviews indexed for this product yet, so I can't answer from evidence."
+
+def _parse_rating(raw_rating: str) -> Optional[float]:
+    """Ratings are stored as strings in ChromaDB metadata ('4.5', 'N/A')."""
+    try:
+        return float(raw_rating)
+    except (TypeError, ValueError):
+        return None
+
 def generate_response(
     product_id: str,
     user_message: str,
     conversation_history: Optional[List[dict]] = None
-) -> str:
+) -> Dict:
     """
     Generate responses using RAG (Retrieval-Augmented Generation) pattern.
     1. Search for relevant reviews/descriptions related to user's question
-    2. Pass retrieved content as context to LLM
-    3. Generate natural responses
+    2. Pass retrieved content as context to LLM, each review tagged with a citation marker
+    3. Return the answer along with the reviews it was allowed to cite
+
+    Returns a dict with keys: answer, sources, insufficient_evidence.
     """
     
     if conversation_history is None:
@@ -32,33 +47,56 @@ def generate_response(
     else:
         print(f"  - WARNING: No documents found! Check embeddings.")
     
-    # 2. Build context
+    # 2. Build context, numbering each review so the answer can cite it
     context_parts = []
+    sources = []
     
     for doc, meta in zip(search_results['documents'], search_results['metadatas']):
         if meta['type'] == 'description':
             context_parts.append(f"[Product Description]\n{doc}\n")
         elif meta['type'] == 'review':
+            marker = len(sources) + 1
             rating = meta.get('rating', 'N/A')
-            context_parts.append(f"[Review - Rating: {rating}]\n{doc}\n")
+            date = meta.get('date') or ""
+            review_id = meta.get('review_id', f"review_{marker}")
+            
+            label = f"[{marker}] Review {review_id} - Rating: {rating}"
+            if date:
+                label += f" - Date: {date}"
+            context_parts.append(f"{label}\n{doc}\n")
+            
+            sources.append({
+                "marker": marker,
+                "review_id": review_id,
+                "content": doc,
+                "rating": _parse_rating(rating),
+                "date": date or None
+            })
     
     context = "\n".join(context_parts)
     
-    # Debug: Check if context is empty
+    # Nothing retrieved: report missing evidence instead of asking the model to invent one
     if not context.strip():
         print(f"[WARNING] Empty context for product {product_id}!")
         print(f"[WARNING] This means embeddings might not be created properly.")
+        return {
+            "answer": NO_EVIDENCE_MESSAGE,
+            "sources": [],
+            "insufficient_evidence": True
+        }
     
     # 3. Build prompt
     system_prompt = f"""You are a product review expert assistant.
 When users ask about a product, provide accurate and helpful answers based on the provided product descriptions and actual user reviews.
 
 Follow these rules:
-1. Answer only based on the provided context (product descriptions and reviews)
-2. Present pros and cons mentioned in reviews in a balanced way
-3. Respond in friendly and natural language that users can easily understand
-4. If information is uncertain, don't guess - say "The reviews lack information on this aspect"
-5. Emphasize points commonly mentioned across multiple reviews
+1. Answer only based on the provided context (product descriptions and reviews). Never use outside knowledge.
+2. Every claim taken from a review must end with that review's marker, e.g. "Battery lasts a full day [1]." Combine markers when several reviews agree, e.g. "[2][3]".
+3. Only use markers that appear in the context below. Never invent a marker number.
+4. If the context does not contain enough information to answer, reply with exactly {INSUFFICIENT_EVIDENCE_TOKEN} on the first line, then one short sentence naming what is missing. Do not guess or fill gaps.
+5. Present pros and cons mentioned in reviews in a balanced way
+6. Respond in friendly and natural language that users can easily understand
+7. Emphasize points commonly mentioned across multiple reviews
 
 Product Information:
 {context}
@@ -86,12 +124,37 @@ Product Information:
             max_tokens=1000
         )
         
-        answer = response.choices[0].message.content
-        return answer
+        answer = (response.choices[0].message.content or "").strip()
+        
+        # 6. Resolve evidence state and keep only the reviews the answer actually cited
+        insufficient_evidence = answer.startswith(INSUFFICIENT_EVIDENCE_TOKEN)
+        if insufficient_evidence:
+            answer = answer[len(INSUFFICIENT_EVIDENCE_TOKEN):].lstrip(" :-\n")
+            if not answer:
+                answer = "The reviews lack information on this aspect."
+            return {
+                "answer": answer,
+                "sources": [],
+                "insufficient_evidence": True
+            }
+        
+        cited_markers = {int(m) for m in re.findall(r"\[(\d+)\]", answer)}
+        if cited_markers:
+            sources = [s for s in sources if s["marker"] in cited_markers]
+        
+        return {
+            "answer": answer,
+            "sources": sources,
+            "insufficient_evidence": False
+        }
         
     except Exception as e:
         print(f"Error generating response: {e}")
-        return f"Sorry, an error occurred while generating the response: {str(e)}"
+        return {
+            "answer": f"Sorry, an error occurred while generating the response: {str(e)}",
+            "sources": [],
+            "insufficient_evidence": False
+        }
 
 def generate_product_summary(product_id: str) -> str:
     """Summarize all reviews for a product."""
